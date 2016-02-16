@@ -1,6 +1,6 @@
 <?php
 
-$sensors = dbFetchRows('SELECT * FROM `sensors` WHERE `sensor_class` = ? AND device_id = ? ORDER BY `poller_type`, `sensor_oid`, `sensor_index`', array($sensor_class, $device['device_id']));
+$sensors = dbFetchRows('SELECT * FROM `sensors` LEFT JOIN sensors_to_state_indexes ON sensors_to_state_indexes.sensor_id = sensors.sensor_id LEFT JOIN state_indexes ON state_indexes.state_index_id = sensors_to_state_indexes.state_index_id WHERE `sensor_class` = ? AND device_id = ? ORDER BY `poller_type`, `sensor_index` ', array($sensor_class, $device['device_id']));
 
 if (count($sensors)) {
     echo '<div class="container-fluid ">
@@ -12,6 +12,12 @@ if (count($sensors)) {
     echo '      </div>
         <table class="table table-hover table-condensed table-striped">';
     foreach ($sensors as $sensor) {
+        $state_translation = array();
+        if (!empty($sensor['state_index_id'])) {
+            $state_translation = dbFetchRows('SELECT * FROM `state_translations` WHERE `state_index_id` = ? AND `state_value` = ? ', array($sensor['state_index_id'], $sensor['sensor_current']));
+var_dump($state_translation);
+        }
+
         if (!isset($sensor['sensor_current'])) {
             $sensor['sensor_current'] = 'NaN';
         }
@@ -52,11 +58,42 @@ if (count($sensors)) {
 
         $sensor['sensor_descr'] = truncate($sensor['sensor_descr'], 48, '');
 
-        echo '<tr>
-            <td>'.overlib_link($link, shorten_interface_type($sensor['sensor_descr']), $overlib_content).'</td>
-            <td>'.overlib_link($link, $sensor_minigraph, $overlib_content).'</td>
-            <td>'.overlib_link($link, '<span '.($sensor['sensor_current'] < $sensor['sensor_limit_low'] || $sensor['sensor_current'] > $sensor['sensor_limit'] ? "style='color: red'" : '').'>'.$sensor['sensor_current'].$sensor_unit.'</span>', $overlib_content).'</td>
-            </tr>';
+        if (!empty($state_translation['state_descr'])) {
+            $state_style="";
+            $state_pre="";
+            switch ($state_translation['state_generic_value']) {
+                case 0: // OK
+                    $state_style="";
+                    $state_pre="OK";
+                    break;
+                case 1: // Warning
+                    $state_style="style='color: orange'";
+                    $state_pre="WARNING";
+                    break;
+                case 2: // Critical
+                    $state_style="style='color: red'";
+                    $state_pre="CRITICAL";
+                    break;
+                case 3: // Unknown
+                default:
+                    $state_style="style='color: orange'";
+                    $state_pre="UNKNOWN";
+                    break;
+            }
+                        }
+            echo '<tr>
+                <td><strong>'.overlib_link($link, shorten_interface_type($sensor['sensor_descr']), $overlib_content).'</strong></td>
+                <td>'.overlib_link($link, $sensor_minigraph, $overlib_content).'</td>
+                <td>'.overlib_link($link, '<span '.$state_style.'>'.$state_translation['state_descr'].'</span>', $overlib_content).'</td>
+                </tr>';
+        }
+        else {
+            echo '<tr>
+                <td>'.overlib_link($link, shorten_interface_type($sensor['sensor_descr']), $overlib_content).'</td>
+                <td>'.overlib_link($link, $sensor_minigraph, $overlib_content).'</td>
+                <td>'.overlib_link($link, '<span '.($sensor['sensor_current'] < $sensor['sensor_limit_low'] || $sensor['sensor_current'] > $sensor['sensor_limit'] ? "style='color: red'" : '').'>'.$sensor['sensor_current'].$sensor_unit.'</span>', $overlib_content).'</td>
+                </tr>';
+        }
     }//end foreach
 
     echo '</table>';
